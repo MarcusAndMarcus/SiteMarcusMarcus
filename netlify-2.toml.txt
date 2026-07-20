@@ -1,0 +1,6 @@
+# Configuração do Netlify para o site Marcus²
+[build]
+  # Pasta que contém o index.html (a raiz do projeto)
+  publish = "."
+  # Pasta onde ficam as funções de servidor (a IA)
+  functions = "netlify/functions"
