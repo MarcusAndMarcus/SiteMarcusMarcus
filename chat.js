@@ -1,10 +1,9 @@
 // ───────────────────────────────────────────────────────────────
-//  Função de IA da Marcus² — roda no servidor (Netlify Functions).
-//  A chave da Anthropic fica AQUI, protegida numa variável de ambiente,
+//  Função de IA da Marcus² — versão para Vercel (pasta /api).
+//  A chave da Anthropic fica protegida numa variável de ambiente
 //  e NUNCA aparece no site que o visitante abre.
 // ───────────────────────────────────────────────────────────────
 
-// Instruções que definem como a IA se comporta (mesmo tom do site).
 const SYSTEM = `Você é o assistente técnico da Marcus² (lê-se "Marcus ao quadrado"), empresa brasileira tocada por pai e filho — os dois se chamam Marcus. Um é programador veterano (30 anos, a "raiz": back-end, sistemas, arquitetura) e o outro é especialista em inteligência artificial.
 
 ## Seu propósito
@@ -25,32 +24,33 @@ Além de apresentar a empresa, você AJUDA de verdade: resolve dúvidas e proble
 - Se a dúvida fugir das áreas acima, diga com sinceridade que ali não é seu forte e traga de volta ao foco da empresa.
 - Nunca invente fatos sobre clientes ou projetos específicos da empresa.`;
 
-exports.handler = async (event) => {
-  const HEADERS = { "Content-Type": "application/json" };
-
-  if (event.httpMethod !== "POST") {
-    return { statusCode: 405, headers: HEADERS, body: JSON.stringify({ error: "Method not allowed" }) };
+module.exports = async (req, res) => {
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
   }
 
-  // lê o corpo da requisição
-  let body = {};
-  try { body = JSON.parse(event.body || "{}"); } catch (e) {}
+  // o Vercel entrega o corpo já em objeto; garantimos os dois casos
+  let body = req.body;
+  if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
+  body = body || {};
 
-  // o site envia { message: "pergunta" }; aceitamos também um histórico { messages: [...] }
   const userMsg = (body.message || "").toString().slice(0, 2000);
   const history = Array.isArray(body.messages) ? body.messages : null;
   const messages = history || (userMsg ? [{ role: "user", content: userMsg }] : null);
 
   if (!messages) {
-    return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ reply: "Mensagem vazia." }) };
+    res.status(400).json({ reply: "Mensagem vazia." });
+    return;
   }
 
   if (!process.env.ANTHROPIC_API_KEY) {
-    return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ reply: "A IA ainda não foi configurada (falta a chave). Enquanto isso, chame a gente no WhatsApp!" }) };
+    res.status(200).json({ reply: "A IA ainda não foi configurada (falta a chave). Enquanto isso, chame a gente no WhatsApp!" });
+    return;
   }
 
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -65,23 +65,15 @@ exports.handler = async (event) => {
       }),
     });
 
-    const data = await res.json();
+    const data = await r.json();
     const reply = (data.content || [])
       .filter((b) => b.type === "text")
       .map((b) => b.text)
       .join("\n")
       .trim();
 
-    return {
-      statusCode: 200,
-      headers: HEADERS,
-      body: JSON.stringify({ reply: reply || "Desculpa, não entendi. Pode reformular?" }),
-    };
+    res.status(200).json({ reply: reply || "Desculpa, não entendi. Pode reformular?" });
   } catch (e) {
-    return {
-      statusCode: 200,
-      headers: HEADERS,
-      body: JSON.stringify({ reply: "Estou com um probleminha agora — me chame no WhatsApp que resolvemos rapidinho." }),
-    };
+    res.status(200).json({ reply: "Estou com um probleminha agora — me chame no WhatsApp que resolvemos rapidinho." });
   }
 };
